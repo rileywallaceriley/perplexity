@@ -1,9 +1,9 @@
 import streamlit as st
 import requests
-import openai
+from openai import OpenAI
 
-# Setup OpenAI client with API key from Streamlit secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Initialize the OpenAI client with your API key
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 def fetch_content_from_perplexity(topic, content_type, num_results):
     """
@@ -12,11 +12,11 @@ def fetch_content_from_perplexity(topic, content_type, num_results):
     url = "https://api.perplexity.ai/chat/completions"
     headers = {"Authorization": f"Bearer {st.secrets['PERPLEXITY_API_KEY']}"}
     data = {
-        "model": "mistral-7b-instruct",
+        "model": "mistral-7b-instruct",  # Adjust based on available models
         "messages": [
-            {"role": "user", "content": topic}
+            {"role": "user", "content": f"Please provide {num_results} pieces of {content_type} about '{topic}'."}
         ],
-        "max_tokens": 512,
+        "max_tokens": 1000,  # Adjust based on expected response length
         "temperature": 0.7,
         "top_p": 1.0
     }
@@ -33,20 +33,14 @@ def enhance_content_with_openai(content):
     """
     Enhance and reformat the content for better readability using OpenAI.
     """
-    try:
-        response = openai.Completion.create(
-            model="text-davinci-003",  # Use an appropriate model
-            prompt=f"Please rewrite the following in a clear, engaging, and informative manner for web publication:\n\n{content}",
-            temperature=0.7,
-            max_tokens=1000,  # Adjust based on your needs
-            top_p=1.0,
-            frequency_penalty=0.0,
-            presence_penalty=0.0
-        )
-        return response.choices[0].text.strip()
-    except Exception as e:
-        st.error(f"Failed to process content with OpenAI: {str(e)}")
-        return ""
+    response = client.completions.create(
+        model="text-davinci-003",  # Adjust based on available models
+        prompt=f"Rewrite the following in a clear, engaging, and informative manner for web publication:\n\n{content}",
+        temperature=0.7,
+        max_tokens=1000,  # Adjust based on your needs
+        top_p=1.0
+    )
+    return response.choices[0].text
 
 def main():
     st.title("Enhanced Content Generator")
