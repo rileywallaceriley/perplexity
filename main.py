@@ -1,69 +1,67 @@
 import streamlit as st
 import requests
 import openai
-import os
 
-# Initialize OpenAI client with the API key from Streamlit secrets
+# Initialize API clients
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-def fetch_content_from_perplexity(topic, content_type, num_results):
+def fetch_content_from_perplexity(topic):
     """
-    Fetch content from Perplexity based on the topic and content type.
+    Fetches initial content based on a given topic from Perplexity.
     """
     url = "https://api.perplexity.ai/chat/completions"
     headers = {"Authorization": f"Bearer {st.secrets['PERPLEXITY_API_KEY']}"}
     data = {
-        "model": "gpt-3.5-turbo",  # Adjust based on available models and requirements
-        "messages": [{"role": "user", "content": topic}],
-        "max_tokens": 1000,  # Adjust as necessary
-        "n": num_results,  # Number of completions to generate
+        "model": "mistral-7b-instruct",
+        "messages": [
+            {"role": "user", "content": topic}
+        ],
+        "max_tokens": 512,
+        "temperature": 0.7,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
     }
     
     response = requests.post(url, headers=headers, json=data)
     if response.status_code == 200:
-        return response.json()['choices']
+        content = response.json()['choices'][0]['message']['content']
+        return content
     else:
         st.error("Failed to fetch data from Perplexity API.")
-        return []
+        return ""
 
-def enhance_content_with_openai(raw_texts, content_type, desired_length):
+def enhance_content_with_openai(content):
     """
-    Use OpenAI to enhance and format the raw texts for readability and content type.
+    Uses OpenAI to enhance and reformat the content for better readability.
     """
-    enhanced_texts = []
-    for text in raw_texts:
-        response = openai.Completion.create(
-            model="text-davinci-003",  # Consider using the latest and most capable model
-            prompt=f"Summarize the following {content_type} into a {desired_length}-word, user-friendly format:\n\n{text}",
-            temperature=0.7,
-            max_tokens=desired_length * 5,  # Estimate max tokens based on desired word count
-            top_p=1.0,
-            frequency_penalty=0.5,
-            presence_penalty=0.0
-        )
-        enhanced_texts.append(response.choices[0].text.strip())
-    return enhanced_texts
+    response = openai.Completion.create(
+        engine="text-davinci-003",  # Adjust based on available engines
+        prompt=f"Rewrite the following in a more engaging, user-friendly manner:\n\n{content}",
+        temperature=0.5,
+        max_tokens=512,
+        top_p=1.0,
+        frequency_penalty=0.0,
+        presence_penalty=0.0
+    )
+    return response.choices[0].text.strip()
 
 def main():
-    st.title("Content Generator with OpenAI and Perplexity")
+    st.title("Enhanced Content Generator")
 
-    topic = st.text_input("Enter Topic:", "")
-    content_type = st.selectbox("Content Type:", ["current news", "blog post", "research article"])
-    num_results = st.number_input("Number of Results:", min_value=1, max_value=3, value=1)
-    desired_length = st.number_input("Desired Length (in words):", min_value=100, max_value=500, value=200)
-    
-    if st.button("Generate Content"):
+    topic = st.text_input("Topic Prompt:", "")
+
+    if st.button("Generate"):
         if not topic:
-            st.warning("Please enter a topic.")
+            st.warning("Please insert a topic prompt.")
             return
         
-        raw_texts = fetch_content_from_perplexity(topic, content_type, num_results)
-        if raw_texts:
-            enhanced_texts = enhance_content_with_openai([text['content'] for text in raw_texts], content_type, desired_length)
-            for enhanced_text in enhanced_texts:
-                st.markdown(enhanced_text)
+        raw_content = fetch_content_from_perplexity(topic)
+        if raw_content:
+            enhanced_content = enhance_content_with_openai(raw_content)
+            st.write(enhanced_content)
         else:
-            st.write("No results found.")
+            st.write("Unable to generate content.")
 
 if __name__ == "__main__":
     main()
