@@ -1,13 +1,14 @@
 import streamlit as st
 import requests
-import json
+import re
 
-# Assuming your Perplexity API key is stored in Streamlit's Secrets or environment variables
+# Assuming your Perplexity API key is stored securely
 PERPLEXITY_API_KEY = st.secrets["PERPLEXITY_API_KEY"]
 
 def fetch_perplexity_results(topic, content_type, quantity):
     """
     Fetch results from the Perplexity AI based on the topic, content type, and quantity.
+    Adjusted parameters for higher content quality and added repetition filtering.
     """
     url = "https://api.perplexity.ai/chat/completions"
     headers = {
@@ -16,30 +17,42 @@ def fetch_perplexity_results(topic, content_type, quantity):
         "Accept": "application/json"
     }
     
-    messages = [
-        {"role": "system", "content": f"Generate {quantity} {content_type.lower()} about {topic}."},
-        {"role": "user", "content": topic}
-    ]
-    
     data = {
-        "model": "mistral-7b-instruct",
-        "messages": messages,
-        "max_tokens": 512,
-        "temperature": 0.7,
+        "model": "mistral-7b-instruct",  # Consider using the highest quality model available
+        "messages": [
+            {"role": "system", "content": f"Generate {quantity} high-quality {content_type.lower()} about {topic}."},
+            {"role": "user", "content": topic}
+        ],
+        "max_tokens": 1024,  # Adjust for longer content
+        "temperature": 0.5,  # Lower for more deterministic output
         "top_p": 1.0,
-        "frequency_penalty": 0.5,
-        "presence_penalty": 0.0
+        "frequency_penalty": 2.0,  # Increase to reduce repetition
+        "presence_penalty": 1.0  # Encourage new topics
     }
     
     response = requests.post(url, headers=headers, json=data)
     if response.status_code == 200:
-        return response.json()
+        content = response.json()['choices'][0]['message']['content']
+        return remove_repetitive_content(content)
     else:
         st.error("Failed to fetch data from Perplexity API.")
         return None
 
+def remove_repetitive_content(content):
+    """
+    Basic filter to remove repetitive sentences or phrases from the generated content.
+    """
+    sentences = re.split(r'(?<=[.!?]) +', content)
+    seen = set()
+    filtered_sentences = []
+    for sentence in sentences:
+        if sentence not in seen:
+            filtered_sentences.append(sentence)
+            seen.add(sentence)
+    return ' '.join(filtered_sentences)
+
 def main():
-    st.title("Content Generator")
+    st.title("Enhanced Content Generator")
 
     topic = st.text_input("Insert Topic Prompt", "")
     
@@ -55,14 +68,9 @@ def main():
         if not topic:
             st.warning("Please insert a topic prompt.")
         else:
-            results = fetch_perplexity_results(topic, content_type, quantity)
-            if results and 'choices' in results and results['choices']:
-                for choice in results['choices']:
-                    content = choice.get('message', {}).get('content', '')
-                    if content:
-                        st.write(content)
-                    else:
-                        st.write("No content generated.")
+            cleaned_content = fetch_perplexity_results(topic, content_type, quantity)
+            if cleaned_content:
+                st.write(cleaned_content)
             else:
                 st.write("No results found.")
 
