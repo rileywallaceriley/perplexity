@@ -2,50 +2,46 @@ import streamlit as st
 import requests
 import openai
 
-# Retrieve API keys from Streamlit's secrets
-PERPLEXITY_API_KEY = st.secrets["PERPLEXITY_API_KEY"]
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-openai.api_key = OPENAI_API_KEY
+# Setup OpenAI client with API key from Streamlit secrets
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-def fetch_content_from_perplexity(topic, content_type, num_results):
+def fetch_content_from_perplexity(topic):
     """
-    Fetch content from Perplexity based on topic, content type, and number of results.
+    Fetch initial content based on a given topic from Perplexity.
     """
     url = "https://api.perplexity.ai/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {st.secrets['PERPLEXITY_API_KEY']}"}
     data = {
-        "model": "mistral-7b-instruct",  # Adjust based on your requirement
+        "model": "mistral-7b-instruct",
         "messages": [
-            {"role": "system", "content": f"Provide {num_results} latest {content_type} on {topic}."},
             {"role": "user", "content": topic}
         ],
-        "max_tokens": 1024,  # Adjust as necessary
+        "max_tokens": 512,
+        "temperature": 0.7,
+        "top_p": 1.0
     }
+    
     response = requests.post(url, headers=headers, json=data)
     if response.status_code == 200:
-        return response.json()
+        content = response.json()['choices'][0]['message']['content']
+        return content
     else:
         st.error("Failed to fetch data from Perplexity API.")
-        return []
+        return ""
 
-def process_content_with_openai(content, desired_length):
+def enhance_content_with_openai(content):
     """
-    Use OpenAI to process and improve the content for readability and length.
+    Enhance and reformat the content for better readability using OpenAI.
     """
     try:
-        response = openai.Completion.create(
-            engine="text-davinci-003",  # Use the latest available engine
-            prompt=f"Summarize and enhance the following content for user-friendly reading, targeting a length of {desired_length} words:\n\n{content}",
-            temperature=0.7,
-            max_tokens=desired_length * 5,  # Estimate tokens based on desired word count
-            top_p=1.0,
-            frequency_penalty=0.5,
-            presence_penalty=0.0
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "The following is a piece of content that needs to be rewritten in a more engaging, user-friendly manner."},
+                {"role": "user", "content": content}
+            ]
         )
-        return response.choices[0].text.strip()
+        return response['choices'][0]['message']['content']
     except Exception as e:
         st.error(f"Failed to process content with OpenAI: {str(e)}")
         return ""
@@ -53,22 +49,19 @@ def process_content_with_openai(content, desired_length):
 def main():
     st.title("Enhanced Content Generator")
 
-    topic = st.text_input("Topic Prompt", "")
-    content_type = st.selectbox("Content Type", ["current news within 48 hours", "blog posts", "research articles"])
-    num_results = st.number_input("Number of Results", min_value=1, max_value=5, value=3)
-    desired_length = st.number_input("Desired Length (in words)", min_value=100, max_value=1000, value=200)
-    
+    topic = st.text_input("Topic Prompt:", "")
+
     if st.button("Generate"):
         if not topic:
             st.warning("Please insert a topic prompt.")
+            return
+        
+        raw_content = fetch_content_from_perplexity(topic)
+        if raw_content:
+            enhanced_content = enhance_content_with_openai(raw_content)
+            st.write(enhanced_content)
         else:
-            raw_content = fetch_content_from_perplexity(topic, content_type, num_results)
-            if raw_content:
-                for content in raw_content.get('choices', []):
-                    processed_content = process_content_with_openai(content.get('message', {}).get('content', ''), desired_length)
-                    st.write(processed_content)
-            else:
-                st.write("No results found.")
+            st.write("Unable to generate content.")
 
 if __name__ == "__main__":
     main()
